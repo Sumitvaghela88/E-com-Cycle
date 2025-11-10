@@ -1,7 +1,7 @@
 const Product = require('../Models/Product');
-const cloudinary = require('../Config/cloudynary'); // ✅ make sure path is correct
+const cloudinary = require('../Config/cloudynary'); 
 
-// 🟢 CREATE Product (with optional image upload)
+//  CREATE Product (with optional image upload)
 exports.createProduct = async (req, res) => {
   try {
     console.log('REQ BODY:', req.body);
@@ -45,12 +45,12 @@ exports.createProduct = async (req, res) => {
       product: newProduct,
     });
   } catch (error) {
-    console.error('❌ Product creation failed:', error);
+    console.error(' Product creation failed:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 🟡 GET All Products
+//  GET All Products
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find(); 
@@ -60,7 +60,7 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// 🔵 GET Single Product by ID
+//  GET Single Product by ID
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -73,7 +73,7 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-// 🟠 UPDATE Product
+//  UPDATE Product
 exports.updateProduct = async (req, res) => {
   try {
     const updateData = req.body;
@@ -98,12 +98,12 @@ exports.updateProduct = async (req, res) => {
       product: updated,
     });
   } catch (error) {
-    console.error('❌ Update failed:', error);
+    console.error(' Update failed:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 🔴 DELETE Product
+//  DELETE Product
 exports.deleteProduct = async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);

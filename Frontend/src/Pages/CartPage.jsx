@@ -1,18 +1,48 @@
 // src/pages/Cart.jsx
-import React from "react";
+import React, { useState } from "react";
 import axios from "axios";
 import { useCart } from "../Components/CartContext";
-import { Box, Typography, Button, Grid, IconButton } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
+import {
+  Box,
+  Typography,
+  Button,
+  IconButton,
+  Card,
+  CardContent,
+  Divider,
+  Container,
+  CircularProgress,
+  Chip,
+} from "@mui/material";
+import {
+  Delete as DeleteIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon,
+  ShoppingCart as ShoppingCartIcon,
+  LocalShipping as LocalShippingIcon,
+  ArrowBack as ArrowBackIcon,
+  Lock as LockIcon,
+} from "@mui/icons-material";
 import toast from "react-hot-toast";
 
 const Cart = () => {
-  const { cart, removeFromCart, clearCart } = useCart();
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const { cart, removeFromCart, clearCart, updateQuantity, addToCart } = useCart();
+  const [loading, setLoading] = useState(false);
 
-  // ✅ Load Razorpay Script Dynamically
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const shipping = subtotal > 0 ? (subtotal >= 5000 ? 0 : 200) : 0;
+  const total = subtotal + shipping;
+
+  // Handle quantity change
+  const handleQuantityChange = (item, newQty) => {
+    if (newQty < 1) return;
+    updateQuantity(item._id, newQty);
+  };
+
+  // ✅ Load Razorpay Script
   const loadRazorpay = () => {
     return new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
       script.onload = () => resolve(true);
@@ -21,60 +51,34 @@ const Cart = () => {
     });
   };
 
-  // ✅ Handle Checkout Button Click
+  // ✅ Handle Checkout
   const handleCheckout = async () => {
-    if (cart.length === 0) {
-      toast.error("Your cart is empty!");
-      return;
-    }
-
-    // ✅ Debug: Check cart total
-    console.log("🛒 Cart Items:", cart);
-    console.log("💰 Cart Total:", total);
-    console.log("💰 Cart Total Type:", typeof total);
+    if (cart.length === 0) return toast.error("Your cart is empty!");
+    setLoading(true);
 
     const res = await loadRazorpay();
     if (!res) {
       toast.error("Razorpay SDK failed to load.");
+      setLoading(false);
       return;
     }
 
     try {
-      // 1️⃣ Create order on backend - Send amount in rupees (backend will convert to paise)
-      console.log("🛒 Cart Total (Rupees):", total);
-      
       const { data } = await axios.post("http://localhost:5000/api/payment/create-order", {
-        amount: total, // ✅ Send in rupees - backend multiplies by 100
+        amount: total,
         currency: "INR",
       });
-      
-      console.log("📦 Backend Response:", data);
-      console.log("💰 Amount in Razorpay (Paise):", data.amount);
 
       const options = {
         key: data.key_id || import.meta.env.VITE_RAZORPAY_KEY_ID,
-        amount: data.amount, // Already in paise from backend
+        amount: data.amount,
         currency: data.currency,
         name: "CasuaLux Bicycles",
         description: "Order Payment",
         order_id: data.order_id,
         image: "https://cdn-icons-png.flaticon.com/512/3202/3202926.png",
-        handler: async function (response) {
+        handler: async (response) => {
           try {
-            console.log("💳 Payment Response from Razorpay:", response);
-            
-            // ✅ Check if we have all required fields for verification
-            if (!response.razorpay_order_id || !response.razorpay_signature) {
-              // This happens with test payments - still mark as successful
-              console.warn("⚠️ Incomplete payment response (test mode)");
-              toast.success("✅ Payment successful! (Test Mode)");
-              clearCart();
-              setTimeout(() => {
-                window.location.href = "/order-success";
-              }, 2000);
-              return;
-            }
-            
             const verifyRes = await axios.post(
               "http://localhost:5000/api/payment/verify-payment",
               {
@@ -83,22 +87,16 @@ const Cart = () => {
                 razorpay_signature: response.razorpay_signature,
               }
             );
-
-            console.log("✅ Verification Response:", verifyRes.data);
-
             if (verifyRes.data.success) {
               toast.success("✅ Payment successful!");
               clearCart();
-              setTimeout(() => {
-                window.location.href = "/order-success";
-              }, 2000);
-            } else {
-              toast.error("Payment verification failed.");
-            }
+              setTimeout(() => (window.location.href = "/order-success"), 1500);
+            } else toast.error("Payment verification failed.");
           } catch (err) {
-            console.error("Verification Error:", err);
-            console.error("Error Details:", err.response?.data);
-            toast.error(err.response?.data?.message || "Payment verification failed.");
+            console.error(err);
+            toast.error("Payment verification failed.");
+          } finally {
+            setLoading(false);
           }
         },
         prefill: {
@@ -106,94 +104,496 @@ const Cart = () => {
           email: "customer@example.com",
           contact: "9999999999",
         },
-        notes: { address: "CasuaLux Bicycle Store" },
-        theme: { color: "#4f46e5" },
-        // ✅ FIX: Handle modal close without payment
-        modal: {
-          ondismiss: function() {
-            toast.error("Payment cancelled.");
-          }
-        }
+        theme: { color: "#1f2937" },
+        modal: { ondismiss: () => toast.error("Payment cancelled.") },
       };
 
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
-      console.error("Payment Error:", error);
-      console.error("Error Details:", error.response?.data); // ✅ See backend error
       toast.error(error.response?.data?.message || "Something went wrong during checkout.");
+      setLoading(false);
     }
   };
 
   return (
-    <Box className="p-10 min-h-screen bg-gray-50">
-      <Typography variant="h4" className="font-bold mb-6">
-        🛒 Your Shopping Cart
-      </Typography>
-
-      {cart.length === 0 ? (
-        <Typography color="text.secondary">Your cart is empty.</Typography>
-      ) : (
-        <>
-          {cart.map((item) => (
-            <Grid
-              key={item._id}
-              container
-              alignItems="center"
-              className="bg-white rounded-xl shadow-sm p-4 mb-4"
-            >
-              <Grid item xs={3}>
-                <img
-                  src={item.images?.[0]}
-                  alt={item.name}
-                  className="w-28 h-24 object-contain"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="h6">{item.name}</Typography>
-                <Typography color="text.secondary">
-                  ₹{item.price} × {item.quantity}
-                </Typography>
-              </Grid>
-              <Grid item xs={3} className="text-right">
-                <IconButton onClick={() => removeFromCart(item._id)} color="error">
-                  <DeleteIcon />
-                </IconButton>
-              </Grid>
-            </Grid>
-          ))}
-
-          <Typography variant="h6" className="font-semibold mt-4">
-            Total: ₹{total.toLocaleString()}
-          </Typography>
-
-          <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #f9fafb 0%, #e5e7eb 100%)",
+        py: { xs: 5, md: 8 },
+        transition: "all 0.3s ease",
+      }}
+    >
+      <Container maxWidth="lg">
+        {/* Header */}
+        <Box sx={{ mb: 5 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              mb: 2,
+            }}
+          >
             <Button
-              variant="contained"
-              color="primary"
-              onClick={handleCheckout}
+              href="/"
+              startIcon={<ArrowBackIcon />}
               sx={{
-                borderRadius: "10px",
-                backgroundColor: "#4f46e5",
-                "&:hover": { backgroundColor: "#4338ca" },
+                color: "#4b5563",
+                textTransform: "none",
+                fontWeight: 600,
+                "&:hover": {
+                  backgroundColor: "rgba(75, 85, 99, 0.08)",
+                },
               }}
             >
-              Proceed to Checkout
+              Continue Shopping
             </Button>
-
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={clearCart}
-              sx={{ borderRadius: "10px" }}
-            >
-              Clear Cart
-            </Button>
+            <Chip
+              label={`${cart.length} ${cart.length === 1 ? "item" : "items"}`}
+              sx={{
+                backgroundColor: "#374151",
+                color: "white",
+                fontWeight: 700,
+                px: 1,
+              }}
+            />
           </Box>
-        </>
-      )}
+
+          <Typography
+            variant="h3"
+            sx={{
+              fontWeight: 900,
+              color: "#111827",
+              mb: 1,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Shopping Cart
+          </Typography>
+          <Typography sx={{ color: "#6b7280", fontSize: "1.1rem" }}>
+            Review your items and proceed to checkout
+          </Typography>
+        </Box>
+
+        {/* Empty Cart */}
+        {cart.length === 0 ? (
+          <Card
+            sx={{
+              maxWidth: 550,
+              mx: "auto",
+              p: 6,
+              textAlign: "center",
+              borderRadius: 4,
+              border: "2px solid #e5e7eb",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
+              backgroundColor: "white",
+            }}
+          >
+            <Box
+              sx={{
+                width: 120,
+                height: 120,
+                borderRadius: "50%",
+                backgroundColor: "#f3f4f6",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 24px",
+                border: "3px solid #e5e7eb",
+              }}
+            >
+              <ShoppingCartIcon sx={{ fontSize: 60, color: "#9ca3af" }} />
+            </Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: "#1f2937" }}>
+              Your cart is empty
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 4, fontSize: "1rem" }}>
+              Start adding some amazing bicycles to your cart!
+            </Typography>
+            <Button
+              variant="contained"
+              href="/"
+              sx={{
+                px: 5,
+                py: 1.8,
+                borderRadius: 3,
+                fontWeight: 700,
+                background: "linear-gradient(135deg, #374151 0%, #1f2937 100%)",
+                textTransform: "none",
+                boxShadow: "0 4px 12px rgba(31, 41, 55, 0.3)",
+                "&:hover": {
+                  background: "linear-gradient(135deg, #1f2937 0%, #111827 100%)",
+                  transform: "translateY(-2px)",
+                  boxShadow: "0 6px 16px rgba(31, 41, 55, 0.4)",
+                },
+              }}
+            >
+              Continue Shopping
+            </Button>
+          </Card>
+        ) : (
+          <Box sx={{ display: "flex", gap: 4, flexDirection: { xs: "column", md: "row" } }}>
+            {/* Cart Items */}
+            <Box sx={{ flex: 1 }}>
+              {cart.map((item, index) => (
+                <Card
+                  key={item._id}
+                  sx={{
+                    mb: 3,
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    border: "2px solid #e5e7eb",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+                    backgroundColor: "white",
+                    animation: `slideIn 0.4s ease-out ${index * 0.1}s both`,
+                    "@keyframes slideIn": {
+                      from: {
+                        opacity: 0,
+                        transform: "translateX(-20px)",
+                      },
+                      to: {
+                        opacity: 1,
+                        transform: "translateX(0)",
+                      },
+                    },
+                    "&:hover": {
+                      transform: "translateY(-4px)",
+                      boxShadow: "0 12px 24px rgba(0,0,0,0.12)",
+                      borderColor: "#9ca3af",
+                    },
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: "flex", gap: 3, alignItems: "center" }}>
+                      {/* Image */}
+                      <Box
+                        sx={{
+                          width: 140,
+                          height: 140,
+                          borderRadius: 2,
+                          overflow: "hidden",
+                          background: "linear-gradient(135deg, #f9fafb 0%, #e5e7eb 100%)",
+                          flexShrink: 0,
+                          border: "2px solid #e5e7eb",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <img
+                          src={item.images?.[0]}
+                          alt={item.name}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            padding: "12px",
+                          }}
+                        />
+                      </Box>
+
+                      {/* Details */}
+                      <Box sx={{ flex: 1 }}>
+                        <Typography
+                          variant="h6"
+                          sx={{ fontWeight: 700, color: "#111827", mb: 1 }}
+                        >
+                          {item.name}
+                        </Typography>
+                        <Typography
+                          variant="h5"
+                          sx={{
+                            color: "#1f2937",
+                            fontWeight: 800,
+                            mb: 2,
+                          }}
+                        >
+                          ₹{item.price.toLocaleString()}
+                        </Typography>
+
+                        {/* Quantity Controls */}
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 3 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              border: "2px solid #d1d5db",
+                              borderRadius: 2,
+                              overflow: "hidden",
+                              backgroundColor: "white",
+                            }}
+                          >
+                            <IconButton
+                              aria-label="Decrease quantity"
+                              size="small"
+                              onClick={() => handleQuantityChange(item, item.quantity - 1)}
+                              disabled={item.quantity <= 1}
+                              sx={{
+                                borderRadius: 0,
+                                color: "#374151",
+                                "&:hover": {
+                                  backgroundColor: "#f3f4f6",
+                                },
+                                "&:disabled": {
+                                  color: "#d1d5db",
+                                },
+                              }}
+                            >
+                              <RemoveIcon fontSize="small" />
+                            </IconButton>
+                            <Typography
+                              sx={{
+                                px: 3,
+                                py: 0.5,
+                                fontWeight: 700,
+                                textAlign: "center",
+                                backgroundColor: "#f9fafb",
+                                color: "#1f2937",
+                                minWidth: "50px",
+                              }}
+                            >
+                              {item.quantity}
+                            </Typography>
+                            <IconButton
+                              aria-label="Increase quantity"
+                              size="small"
+                              onClick={() => handleQuantityChange(item, item.quantity + 1)}
+                              sx={{
+                                borderRadius: 0,
+                                color: "#374151",
+                                "&:hover": {
+                                  backgroundColor: "#f3f4f6",
+                                },
+                              }}
+                            >
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+
+                          <Box>
+                            <Typography
+                              sx={{
+                                color: "#6b7280",
+                                fontSize: "0.875rem",
+                                fontWeight: 500,
+                              }}
+                            >
+                              Subtotal
+                            </Typography>
+                            <Typography
+                              sx={{
+                                color: "#1f2937",
+                                fontWeight: 700,
+                                fontSize: "1.1rem",
+                              }}
+                            >
+                              ₹{(item.price * item.quantity).toLocaleString()}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+
+                      {/* Remove Button */}
+                      <IconButton
+                        onClick={() => removeFromCart(item._id)}
+                        aria-label="Remove from cart"
+                        sx={{
+                          color: "#6b7280",
+                          border: "2px solid #e5e7eb",
+                          borderRadius: 2,
+                          "&:hover": {
+                            backgroundColor: "#fef2f2",
+                            borderColor: "#ef4444",
+                            color: "#ef4444",
+                            transform: "scale(1.1)",
+                          },
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+
+            {/* Order Summary */}
+            <Card
+              sx={{
+                width: { xs: "100%", md: 420 },
+                height: "fit-content",
+                position: { md: "sticky" },
+                top: 20,
+                borderRadius: 3,
+                border: "2px solid #e5e7eb",
+                boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+                backgroundColor: "white",
+              }}
+            >
+              <CardContent sx={{ p: 4 }}>
+                <Typography
+                  variant="h5"
+                  sx={{ fontWeight: 800, mb: 4, color: "#111827" }}
+                >
+                  Order Summary
+                </Typography>
+
+                <Box sx={{ mb: 3 }}>
+                  <SummaryRow label="Subtotal" value={`₹${subtotal.toLocaleString()}`} />
+                  <SummaryRow
+                    label={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <LocalShippingIcon sx={{ fontSize: 20, color: "#6b7280" }} />
+                        Shipping
+                      </Box>
+                    }
+                    value={shipping === 0 ? "FREE" : `₹${shipping}`}
+                    color={shipping === 0 ? "#10b981" : "#6b7280"}
+                    bold={shipping === 0}
+                  />
+
+                  {subtotal > 0 && subtotal < 5000 && (
+                    <Box
+                      sx={{
+                        fontSize: "0.875rem",
+                        color: "#92400e",
+                        backgroundColor: "#fef3c7",
+                        border: "1px solid #fcd34d",
+                        p: 2,
+                        borderRadius: 2,
+                        mb: 2,
+                        mt: 2,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                      }}
+                    >
+                      <LocalShippingIcon sx={{ fontSize: 18 }} />
+                      <Typography sx={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                        Add ₹{(5000 - subtotal).toLocaleString()} more for FREE shipping!
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <Divider sx={{ my: 3, borderColor: "#e5e7eb" }} />
+                  
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      p: 2,
+                      backgroundColor: "#f9fafb",
+                      borderRadius: 2,
+                      border: "2px solid #e5e7eb",
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: "#111827" }}>
+                      Total
+                    </Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 900, color: "#1f2937" }}>
+                      ₹{total.toLocaleString()}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Security Badge */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 1,
+                    mb: 3,
+                    color: "#6b7280",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  <LockIcon sx={{ fontSize: 16 }} />
+                  <Typography sx={{ fontSize: "0.875rem", fontWeight: 500 }}>
+                    Secure checkout guaranteed
+                  </Typography>
+                </Box>
+
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={handleCheckout}
+                  disabled={loading}
+                  sx={{
+                    py: 2,
+                    mb: 2,
+                    borderRadius: 2,
+                    fontWeight: 700,
+                    fontSize: "1.1rem",
+                    textTransform: "none",
+                    background: "linear-gradient(135deg, #374151 0%, #1f2937 100%)",
+                    boxShadow: "0 4px 12px rgba(31, 41, 55, 0.3)",
+                    "&:hover": {
+                      background: "linear-gradient(135deg, #1f2937 0%, #111827 100%)",
+                      transform: "translateY(-2px)",
+                      boxShadow: "0 6px 16px rgba(31, 41, 55, 0.4)",
+                    },
+                    "&:disabled": {
+                      background: "#d1d5db",
+                    },
+                  }}
+                >
+                  {loading ? (
+                    <CircularProgress size={26} sx={{ color: "white" }} />
+                  ) : (
+                    "Proceed to Checkout"
+                  )}
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={clearCart}
+                  sx={{
+                    py: 1.5,
+                    borderRadius: 2,
+                    borderWidth: 2,
+                    borderColor: "#d1d5db",
+                    color: "#6b7280",
+                    fontWeight: 600,
+                    textTransform: "none",
+                    "&:hover": {
+                      backgroundColor: "#fef2f2",
+                      borderColor: "#ef4444",
+                      color: "#ef4444",
+                      borderWidth: 2,
+                    },
+                  }}
+                >
+                  Clear Cart
+                </Button>
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+      </Container>
     </Box>
   );
 };
+
+// 🧩 Reusable summary row
+const SummaryRow = ({ label, value, color, bold }) => (
+  <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+    <Typography sx={{ color: "#6b7280", fontWeight: 500 }}>{label}</Typography>
+    <Typography
+      sx={{
+        fontWeight: bold ? 700 : 600,
+        color: color || "#1f2937",
+      }}
+    >
+      {value}
+    </Typography>
+  </Box>
+);
 
 export default Cart;

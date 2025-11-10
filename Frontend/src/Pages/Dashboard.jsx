@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   LayoutDashboard,
   Package,
@@ -10,8 +11,11 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import ProductForm from "../Components/ProductForm";
 
 const API_URL = "http://localhost:5000/api";
+const axiosInstance = axios.create({ baseURL: API_URL });
 
 export default function AdminDashboard() {
   // ===== STATES =====
@@ -31,23 +35,7 @@ export default function AdminDashboard() {
   // ===== PRODUCT STATES =====
   const [products, setProducts] = useState([]);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [editProduct, setEditProduct] = useState(null);
-  const [productForm, setProductForm] = useState({
-    name: "",
-    description: "",
-    price: "",
-    brand: "",
-    stock: "",
-    images: [],
-    specifications: {
-      frameSize: "",
-      wheelSize: "",
-      gears: "",
-      material: "",
-      weight: "",
-      color: [],
-    },
-  });
+  const [editingProduct, setEditingProduct] = useState(null);
 
   // ===== AUTH / INIT =====
   useEffect(() => {
@@ -55,27 +43,24 @@ export default function AdminDashboard() {
     if (token) {
       setIsLoggedIn(true);
       loadDashboardData();
+      axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
     }
   }, []);
 
   const handleLogin = async () => {
     try {
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginForm),
-      });
-
-      const data = await response.json();
-      if (response.ok && data.user.role === "admin") {
+      const { data } = await axiosInstance.post("/auth/login", loginForm);
+      if (data.user?.role === "admin") {
         localStorage.setItem("adminToken", data.token);
+        axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
         setIsLoggedIn(true);
         loadDashboardData();
+        toast.success("Login successful!");
       } else {
-        alert("Invalid credentials or not an admin");
+        toast.error(data.message || "Invalid credentials or not an admin");
       }
     } catch (err) {
-      alert("Login failed: " + err.message);
+      toast.error(err.response?.data?.message || "Login failed: " + err.message);
     }
   };
 
@@ -87,12 +72,8 @@ export default function AdminDashboard() {
 
   // ===== DASHBOARD =====
   const loadDashboardData = async () => {
-    const token = localStorage.getItem("adminToken");
     try {
-      const response = await fetch(`${API_URL}/admin/stats`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
+      const { data } = await axiosInstance.get("/admin/stats");
       setStats(data);
       setLoading(false);
     } catch (err) {
@@ -102,22 +83,14 @@ export default function AdminDashboard() {
   };
 
   const updateOrderStatus = async (orderId, status) => {
-    const token = localStorage.getItem("adminToken");
     try {
-      const response = await fetch(`${API_URL}/admin/orders/${orderId}`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ orderStatus: status }),
-      });
-      if (response.ok) {
-        alert("Order status updated!");
+      const { data } = await axiosInstance.put(`/admin/orders/${orderId}`, { orderStatus: status });
+      if (data) {
+        toast.success("Order status updated!");
         loadDashboardData();
-      } else alert("Failed to update order");
+      }
     } catch (err) {
-      alert("Error: " + err.message);
+      toast.error(err.response?.data?.message || "Error: " + err.message);
     }
   };
 
@@ -125,8 +98,7 @@ export default function AdminDashboard() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/products`);
-      const data = await res.json();
+      const { data } = await axiosInstance.get("/products");
       setProducts(data);
       setLoading(false);
     } catch (err) {
@@ -135,94 +107,25 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleProductChange = (e) => {
-    const { name, value } = e.target;
-    if (name.startsWith("spec_")) {
-      const specKey = name.replace("spec_", "");
-      setProductForm({
-        ...productForm,
-        specifications: {
-          ...productForm.specifications,
-          [specKey]: value,
-        },
-      });
-    } else {
-      setProductForm({ ...productForm, [name]: value });
-    }
-  };
-
-  const handleColorChange = (e) => {
-    const colors = e.target.value.split(",").map((c) => c.trim());
-    setProductForm({
-      ...productForm,
-      specifications: {
-        ...productForm.specifications,
-        color: colors,
-      },
-    });
-  };
-
-  const handleProductSubmit = async (e) => {
-    e.preventDefault();
-
+  const handleProductSubmit = async (productData) => {
     try {
-      const method = editProduct ? "PUT" : "POST";
-      const url = editProduct
-        ? `${API_URL}/products/${editProduct._id}`
-        : `${API_URL}/products`;
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productForm),
-      });
-
-      if (response.ok) {
-        alert(editProduct ? "Product updated successfully!" : "Product added successfully!");
-        setShowProductForm(false);
-        setEditProduct(null);
-        resetProductForm();
-        loadProducts();
+      if (editingProduct) {
+        await axiosInstance.put(`/products/${editingProduct._id}`, productData);
+        toast.success("Product updated successfully!");
       } else {
-        alert("Failed to save product");
+        await axiosInstance.post("/products", productData);
+        toast.success("Product added successfully!");
       }
+      setShowProductForm(false);
+      setEditingProduct(null);
+      loadProducts();
     } catch (err) {
-      alert("Error: " + err.message);
+      toast.error(err.response?.data?.message || "Failed to save product.");
     }
-  };
-
-  const resetProductForm = () => {
-    setProductForm({
-      name: "",
-      description: "",
-      price: "",
-      brand: "",
-      stock: "",
-      images: [],
-      specifications: {
-        frameSize: "",
-        wheelSize: "",
-        gears: "",
-        material: "",
-        weight: "",
-        color: [],
-      },
-    });
   };
 
   const handleEditProduct = (p) => {
-    setEditProduct(p);
-    setProductForm({
-      ...p,
-      specifications: p.specifications || {
-        frameSize: "",
-        wheelSize: "",
-        gears: "",
-        material: "",
-        weight: "",
-        color: [],
-      },
-    });
+    setEditingProduct(p);
     setShowProductForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -230,18 +133,17 @@ export default function AdminDashboard() {
   const handleDeleteProduct = async (id) => {
     if (window.confirm("Are you sure you want to delete this product?")) {
       try {
-        await fetch(`${API_URL}/products/${id}`, { method: "DELETE" });
-        alert("Product deleted successfully!");
+        await axiosInstance.delete(`/products/${id}`);
+        toast.success("Product deleted successfully!");
         loadProducts();
       } catch (err) {
-        alert("Error deleting product: " + err.message);
+        toast.error(err.response?.data?.message || "Error deleting product.");
       }
     }
   };
 
   const handleAddNew = () => {
-    setEditProduct(null);
-    resetProductForm();
+    setEditingProduct(null);
     setShowProductForm(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -255,38 +157,37 @@ export default function AdminDashboard() {
   // ===== LOGIN PAGE =====
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Optional faint background pattern */}
+        {/* <div className="absolute inset-0 bg-[url('/bike-pattern.svg')] opacity-10 bg-cover"></div> */}
+
+        <div className="bg-gradient-to-b from-gray-800 to-gray-900 rounded-2xl shadow-2xl p-8 w-full max-w-md border border-gray-700 relative z-10">
           <div className="text-center mb-8">
-            <LayoutDashboard className="w-12 h-12 text-blue-600 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">
-              Admin Login
-            </h1>
-            <p className="text-gray-600">Bicycle E-commerce Dashboard</p>
+            <div className="bg-gradient-to-br from-gray-700 to-gray-800 p-4 rounded-2xl inline-block mb-4 shadow-lg">
+              <LayoutDashboard className="w-12 h-12 text-gray-300" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-100 mb-2">Admin Login</h1>
+            <p className="text-gray-400">Bicycle E-commerce Dashboard</p>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-5">
             <input
               type="email"
               value={loginForm.email}
-              onChange={(e) =>
-                setLoginForm({ ...loginForm, email: e.target.value })
-              }
+              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
               placeholder="admin@example.com"
-              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition"
             />
             <input
               type="password"
               value={loginForm.password}
-              onChange={(e) =>
-                setLoginForm({ ...loginForm, password: e.target.value })
-              }
+              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               placeholder="••••••••"
-              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition"
             />
             <button
               onClick={handleLogin}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition"
+              className="w-full bg-gradient-to-r from-gray-700 to-gray-600 text-gray-100 py-3 rounded-lg hover:from-gray-600 hover:to-gray-500 transition shadow-lg font-medium"
             >
               Sign In
             </button>
@@ -375,7 +276,7 @@ export default function AdminDashboard() {
         </nav>
       </aside>
 
-      {/* Main */}
+      {/* Main Section */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="bg-white shadow-sm border-b">
@@ -394,10 +295,9 @@ export default function AdminDashboard() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          {/* DASHBOARD PAGE */}
+          {/* DASHBOARD */}
           {currentPage === "dashboard" && (
             <div className="space-y-6">
-              {/* Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {statsCards.map((card, i) => {
                   const Icon = card.icon;
@@ -444,13 +344,15 @@ export default function AdminDashboard() {
                             <td className="p-3 text-sm">{order.user?.name || "N/A"}</td>
                             <td className="p-3 text-sm">₹{order.totalAmount}</td>
                             <td className="p-3 text-sm">
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                order.orderStatus === "Delivered" 
-                                  ? "bg-green-100 text-green-800"
-                                  : order.orderStatus === "Processing"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                              }`}>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  order.orderStatus === "Delivered"
+                                    ? "bg-green-100 text-green-800"
+                                    : order.orderStatus === "Processing"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
                                 {order.orderStatus}
                               </span>
                             </td>
@@ -473,13 +375,11 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* PRODUCTS PAGE */}
+          {/* PRODUCTS */}
           {currentPage === "products" && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-semibold text-gray-800">
-                  Products Management
-                </h2>
+                <h2 className="text-2xl font-semibold text-gray-800">Products Management</h2>
                 <button
                   onClick={handleAddNew}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
@@ -491,200 +391,18 @@ export default function AdminDashboard() {
               {/* Product Form */}
               {showProductForm && (
                 <div className="bg-white p-6 rounded-xl shadow-md border">
-                  <h3 className="text-xl font-semibold mb-4">
-                    {editProduct ? "Edit Product" : "Add New Product"}
-                  </h3>
-
-                  <form onSubmit={handleProductSubmit} className="space-y-4">
-                    {/* Basic Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <input
-                        type="text"
-                        name="name"
-                        placeholder="Product Name"
-                        value={productForm.name}
-                        onChange={handleProductChange}
-                        required
-                        className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="number"
-                        name="price"
-                        placeholder="Price (₹)"
-                        value={productForm.price}
-                        onChange={handleProductChange}
-                        required
-                        className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="text"
-                        name="brand"
-                        placeholder="Brand"
-                        value={productForm.brand}
-                        onChange={handleProductChange}
-                        className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <input
-                        type="number"
-                        name="stock"
-                        placeholder="Stock Quantity"
-                        value={productForm.stock}
-                        onChange={handleProductChange}
-                        className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-
-                    <textarea
-                      name="description"
-                      placeholder="Product Description"
-                      value={productForm.description}
-                      onChange={handleProductChange}
-                      required
-                      rows="3"
-                      className="border p-3 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-
-                    {/* Specifications */}
-                    <div className="border-t pt-4">
-                      <h4 className="font-semibold mb-3 text-gray-700">Specifications</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <input
-                          type="text"
-                          name="spec_frameSize"
-                          placeholder="Frame Size (e.g., 17, 19, 21)"
-                          value={productForm.specifications.frameSize}
-                          onChange={handleProductChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                          type="text"
-                          name="spec_wheelSize"
-                          placeholder="Wheel Size (e.g., 26, 27.5, 29)"
-                          value={productForm.specifications.wheelSize}
-                          onChange={handleProductChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                          type="text"
-                          name="spec_gears"
-                          placeholder="Gears (e.g., 21, 24)"
-                          value={productForm.specifications.gears}
-                          onChange={handleProductChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                          type="text"
-                          name="spec_material"
-                          placeholder="Material (e.g., Aluminum, Steel)"
-                          value={productForm.specifications.material}
-                          onChange={handleProductChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                          type="text"
-                          name="spec_weight"
-                          placeholder="Weight (e.g., 12kg)"
-                          value={productForm.specifications.weight}
-                          onChange={handleProductChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <input
-                          type="text"
-                          name="colors"
-                          placeholder="Colors (comma separated)"
-                          value={productForm.specifications.color?.join(", ") || ""}
-                          onChange={handleColorChange}
-                          className="border p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Image Upload */}
-                    <div className="border-t pt-4">
-                      <label className="font-medium text-gray-700 block mb-2">
-                        Product Images
-                      </label>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files);
-                          Promise.all(
-                            files.map(
-                              (file) =>
-                                new Promise((resolve, reject) => {
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => resolve(ev.target.result);
-                                  reader.onerror = reject;
-                                  reader.readAsDataURL(file);
-                                })
-                            )
-                          ).then((base64Images) => {
-                            setProductForm((prev) => ({
-                              ...prev,
-                              images: [...(prev.images || []), ...base64Images],
-                            }));
-                          });
-                        }}
-                        className="border p-2 rounded-lg w-full"
-                      />
-                    </div>
-
-                    {/* Image Preview */}
-                    {productForm.images?.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        {productForm.images.map((img, i) => (
-                          <div
-                            key={i}
-                            className="relative border rounded-lg overflow-hidden group"
-                          >
-                            <img
-                              src={img}
-                              alt={`preview-${i}`}
-                              className="w-full h-24 object-cover"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newImages = [...productForm.images];
-                                newImages.splice(i, 1);
-                                setProductForm({ ...productForm, images: newImages });
-                              }}
-                              className="absolute top-1 right-1 bg-red-600 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 pt-4">
-                      <button
-                        type="submit"
-                        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition"
-                      >
-                        {editProduct ? "Update Product" : "Add Product"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditProduct(null);
-                          setShowProductForm(false);
-                          resetProductForm();
-                        }}
-                        className="bg-gray-400 text-white px-6 py-2 rounded-lg hover:bg-gray-500 transition"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
+                  <ProductForm
+                    product={editingProduct}
+                    onSubmit={handleProductSubmit}
+                    onCancel={() => {
+                      setEditingProduct(null);
+                      setShowProductForm(false);
+                    }}
+                  />
                 </div>
               )}
 
-              {/* Products Table */}
+              {/* Product Table */}
               <div className="bg-white rounded-xl shadow-md border overflow-x-auto">
                 {loading ? (
                   <div className="text-center py-10 text-gray-500">Loading products...</div>
@@ -722,13 +440,15 @@ export default function AdminDashboard() {
                             <td className="p-4">{p.brand || "-"}</td>
                             <td className="p-4">₹{p.price}</td>
                             <td className="p-4">
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                p.stock > 10 
-                                  ? "bg-green-100 text-green-800"
-                                  : p.stock > 0
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  p.stock > 10
+                                    ? "bg-green-100 text-green-800"
+                                    : p.stock > 0
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
                                 {p.stock}
                               </span>
                             </td>
@@ -761,10 +481,7 @@ export default function AdminDashboard() {
                         ))
                       ) : (
                         <tr>
-                          <td
-                            colSpan="9"
-                            className="text-center text-gray-500 py-8"
-                          >
+                          <td colSpan="9" className="text-center text-gray-500 py-8">
                             No products found. Add your first product!
                           </td>
                         </tr>

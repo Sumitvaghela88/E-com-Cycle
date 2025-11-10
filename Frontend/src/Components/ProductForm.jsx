@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 export default function ProductForm({ product, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
@@ -21,22 +21,27 @@ export default function ProductForm({ product, onSubmit, onCancel }) {
   const [previewImages, setPreviewImages] = useState([]);
   const [colorInput, setColorInput] = useState("");
 
+  const resetForm = useCallback(() => {
+    setFormData({
+      name: "", description: "", price: "", brand: "", stock: 0, images: [],
+      specifications: { frameSize: "", wheelSize: "", gears: "", material: "", weight: "", color: [] },
+    });
+    setPreviewImages([]);
+    setColorInput("");
+  }, []);
+
   useEffect(() => {
     if (product) {
       setFormData({
         ...product,
-        specifications: {
-          frameSize: product.specifications?.frameSize || "",
-          wheelSize: product.specifications?.wheelSize || "",
-          gears: product.specifications?.gears || "",
-          material: product.specifications?.material || "",
-          weight: product.specifications?.weight || "",
-          color: product.specifications?.color || [],
-        },
+        specifications: product.specifications || { frameSize: "", wheelSize: "", gears: "", material: "", weight: "", color: [] },
       });
       setPreviewImages(product.images || []);
+      setColorInput(product.specifications?.color?.join(", ") || "");
+    } else {
+      resetForm();
     }
-  }, [product]);
+  }, [product, resetForm]);
 
   // === Handle field changes ===
   const handleChange = (e) => {
@@ -117,6 +122,7 @@ export default function ProductForm({ product, onSubmit, onCancel }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(formData);
+    resetForm();
   };
 
   return (
