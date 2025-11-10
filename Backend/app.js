@@ -22,7 +22,7 @@ app.use('/api/auth', require('./Routes/auth'));
 app.use('/api/products', require('./Routes/products'));
 app.use('/api/orders', require('./Routes/order'));
 app.use('/api/admin', require('./Routes/admin'));
-
+app.use("/api/customer", require("./Routes/admin"));
 
 const paymentRoutes = require("./Routes/Payment");
 app.use('/api/payment', paymentRoutes);

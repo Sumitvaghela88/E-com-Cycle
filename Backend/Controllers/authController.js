@@ -1,24 +1,39 @@
-const jwt = require('jsonwebtoken');
-const User = require('../Models/User');
+const jwt = require("jsonwebtoken");
+const User = require("../Models/User");
 
-// Helper to generate JWT
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+// ===== Helper to Generate JWT with Role =====
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "30d" }
+  );
 };
 
-// @desc Register new user
+// ===== REGISTER USER (Default: customer) =====
 exports.registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, phone, address, role } = req.body;
 
+    // Check for existing email
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: "User already exists" });
 
-    const user = await User.create({ name, email, password });
+    // Create new user (default role = customer)
+    const user = await User.create({
+      name,
+      email,
+      password,
+      phone,
+      address,
+      role: "customer", // Ensure new registrations are always 'customer'
+    });
 
-    const token = generateToken(user._id);
+    const token = generateToken(user);
+
     res.status(201).json({
+      message: "Registration successful",
       token,
       user: {
         id: user._id,
@@ -28,22 +43,31 @@ exports.registerUser = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Register Error:", err.message);
+    res.status(500).json({ message: "Registration failed", error: err.message });
   }
 };
 
-// @desc Login user
+// ===== LOGIN USER =====
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Find user
     const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!user)
+      return res.status(404).json({ message: "User not found" });
 
-    const token = generateToken(user._id);
+    // Check password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    // Generate token
+    const token = generateToken(user);
+
     res.json({
+      message: "Login successful",
       token,
       user: {
         id: user._id,
@@ -53,6 +77,7 @@ exports.loginUser = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Login Error:", err.message);
+    res.status(500).json({ message: "Login failed", error: err.message });
   }
 };

@@ -1,59 +1,77 @@
-const Order = require('../Models/Order');
-const Product = require('../Models/Product');
-const User = require('../Models/User');
+const Order = require("../Models/Order");
+const User = require("../Models/User");
+const Product = require("../Models/Product");
 
-// Dashboard stats
-exports.getStats = async (req, res) => {
+// ====== GET STATS (Dashboard Overview) ======
+const getStats = async (req, res) => {
   try {
     const totalOrders = await Order.countDocuments();
+    const totalUsers = await User.countDocuments({ role: "customer" });
     const totalProducts = await Product.countDocuments();
-    const totalUsers = await User.countDocuments({ role: 'customer' });
 
-    const revenue = await Order.aggregate([
-      { $match: { paymentStatus: 'completed' } },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    const orders = await Order.find().sort({ createdAt: -1 }).limit(5);
+    const totalRevenue = await Order.aggregate([
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
     ]);
 
-    const recentOrders = await Order.find()
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 })
-      .limit(10);
-
     res.json({
+      totalRevenue: totalRevenue[0]?.total || 0,
       totalOrders,
       totalProducts,
       totalUsers,
-      totalRevenue: revenue[0]?.total || 0,
-      recentOrders,
+      recentOrders: orders,
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Error fetching stats:", err);
+    res.status(500).json({ message: "Error fetching stats", error: err.message });
   }
 };
 
-// Get all orders
-exports.getOrders = async (req, res) => {
+// ====== GET ALL ORDERS ======
+const getOrders = async (req, res) => {
   try {
     const orders = await Order.find()
-      .populate('user', 'name email')
-      .populate('items.product', 'name price')
+      .populate("user", "name email")
       .sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error fetching orders", error: err.message });
   }
 };
 
-// Update order status
-exports.updateOrderStatus = async (req, res) => {
+// ====== UPDATE ORDER STATUS ======
+const updateOrderStatus = async (req, res) => {
   try {
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { orderStatus: req.body.orderStatus },
-      { new: true }
-    );
-    res.json(order);
+    const { id } = req.params;
+    const { orderStatus } = req.body;
+
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.orderStatus = orderStatus;
+    await order.save();
+
+    res.json({ message: "Order status updated", order });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error updating order status", error: err.message });
   }
+};
+
+// ====== GET CUSTOMERS ======
+const  getCustomers = async (req, res) => {
+  try {
+    const customers = await User.find({ role: "customer" }).select("-password");
+    res.status(200).json(customers);
+  } catch (err) {
+    console.error("Error fetching customers:", err);
+    res.status(500).json({ message: "Failed to fetch customers" });
+  }
+};
+
+// ====== EXPORT ALL FUNCTIONS ======
+module.exports = {
+  getStats,
+  getOrders,
+  updateOrderStatus,
+  getCustomers,
 };

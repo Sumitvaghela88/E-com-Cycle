@@ -9,6 +9,7 @@ import ProductsPage from "./Pages/ProductPage";
 import Cart from "./Pages/CartPage";
 import SellIcon from "@mui/icons-material/Sell"; 
 import OrderSuccess from "./Pages/Ordersuccess";
+import CustomerAuth from "./Pages/CustomerAuth";
 
 
 
@@ -53,7 +54,9 @@ function App() {
             <Route path="/sell" element={<SellPage/>} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/account" element={<AdminDashboard />} />
+             <Route path="/account" element={<CustomerAuth />} />
             <Route path="/sell" element={<OrderSuccess />} />
+             
 
             
           </Routes>

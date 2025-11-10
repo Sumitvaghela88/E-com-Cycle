@@ -4,6 +4,7 @@ const {
   getStats,
   getOrders,
   updateOrderStatus,
+  getCustomers,
 } = require('../Controllers/adminController');
 
 const router = express.Router();
@@ -12,5 +13,7 @@ router.use(protect, admin);
 router.get('/stats', getStats);
 router.get('/orders', getOrders);
 router.put('/orders/:id', updateOrderStatus);
+
+router.get("/customers", getCustomers);
 
 module.exports = router;
