@@ -29,15 +29,15 @@ export const CartProvider = ({ children }) => {
     });
   };
 
-  // ❌ Remove an item
+  //  Remove an item
   const removeFromCart = (id) => {
     setCart((prevCart) => prevCart.filter((item) => item._id !== id));
   };
 
-  // 🧼 Clear entire cart
+  //  Clear entire cart
   const clearCart = () => setCart([]);
 
-  // 🔁 Update quantity (✅ the main fix)
+  //  Update quantity (✅ the main fix)
   const updateQuantity = (id, newQuantity) => {
     setCart((prevCart) =>
       prevCart.map((item) =>

@@ -1,44 +1,28 @@
-import { Suspense, lazy } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Suspense, lazy, useContext } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./App.css";
+
 import Navbar from "./Components/Navbar";
 import Footer from "./Components/Footer";
 import LoadingScreen from "./Components/LoadingScreen";
+
 import AdminDashboard from "./Pages/Dashboard";
 import ProductsPage from "./Pages/ProductPage";
 import Cart from "./Pages/CartPage";
-import SellIcon from "@mui/icons-material/Sell"; 
 import OrderSuccess from "./Pages/Ordersuccess";
 import CustomerAuth from "./Pages/CustomerAuth";
+import AdminAuth from "./Pages/AdminAuth";
 
+import CustomerProtectedRoute from "./Components/CustomerProtectedRoute";
+import AdminProtectedRoute from "./Components/AdminProtectedRoute";
 
+import { AuthContext } from "./context/AuthContext";
 
-// Lazy load Home page
 const Home = lazy(() => import("./Pages/Home"));
 
-// Placeholder routed pages
-const CategoriesPage = () => (
-  <div className="min-h-screen flex items-center justify-center text-2xl font-semibold text-gray-700">
-    All Categories Page Coming Soon
-  </div>                                                             
-);
-const SellPage = () => (
-  <div className="min-h-screen flex items-center justify-center text-2xl font-semibold text-gray-700">
-    Sell Page Coming Soon
-  </div>
-);
-const CartPage = () => (
-  <div className="min-h-screen flex items-center justify-center text-2xl font-semibold text-gray-700">
-    Cart Page Coming Soon
-  </div>
-);
-const AccountPage = () => (
-  <div className="min-h-screen flex items-center justify-center text-2xl font-semibold text-gray-700">
-    Account Page Coming Soon
-  </div>
-);
-
 function App() {
+  const { user, role } = useContext(AuthContext);
+
   return (
     <Router>
       <Navbar />
@@ -46,19 +30,70 @@ function App() {
       <Suspense fallback={<LoadingScreen />}>
         <main className="overflow-x-hidden bg-white text-gray-900">
           <Routes>
-            {/* Home route */}
+
+            {/* PUBLIC */}
             <Route path="/" element={<Home />} />
+            <Route path="/order-success" element={<OrderSuccess />} />
 
-            {/* Other routes */}
-            <Route path="/products" element={<ProductsPage />} />
-            <Route path="/sell" element={<SellPage/>} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/account" element={<AdminDashboard />} />
-             <Route path="/account" element={<CustomerAuth />} />
-            <Route path="/sell" element={<OrderSuccess />} />
-             
+            {/* CUSTOMER AUTH */}
+            <Route
+              path="/customer-auth"
+              element={
+                user && role === "customer" ? (
+                  <Navigate to="/" />
+                ) : user && role === "admin" ? (
+                  <Navigate to="/admin" />
+                ) : (
+                  <CustomerAuth />
+                )
+              }
+            />
 
-            
+            {/* ADMIN AUTH */}
+            <Route
+              path="/admin-auth"
+              element={
+                user && role === "admin" ? (
+                  <Navigate to="/admin" />
+                ) : user && role === "customer" ? (
+                  <Navigate to="/" />
+                ) : (
+                  <AdminAuth />
+                )
+              }
+            />
+
+            {/* CUSTOMER PROTECTED */}
+            <Route
+              path="/products"
+              element={
+                <CustomerProtectedRoute>
+                  <ProductsPage />
+                </CustomerProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/cart"
+              element={
+                <CustomerProtectedRoute>
+                  <Cart />
+                </CustomerProtectedRoute>
+              }
+            />
+
+            {/* ADMIN PROTECTED */}
+            <Route
+              path="/admin"
+              element={
+                <AdminProtectedRoute>
+                  <AdminDashboard />
+                </AdminProtectedRoute>
+              }
+            />
+
+            {/* DEFAULT */}
+            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>
       </Suspense>

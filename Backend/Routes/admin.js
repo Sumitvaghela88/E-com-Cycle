@@ -8,7 +8,6 @@ const {
 } = require('../Controllers/adminController');
 
 const router = express.Router();
-router.use(protect, admin);
 
 router.get('/stats', getStats);
 router.get('/orders', getOrders);

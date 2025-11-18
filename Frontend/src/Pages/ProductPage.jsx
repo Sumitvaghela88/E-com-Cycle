@@ -26,6 +26,7 @@ const Products = () => {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("idle");
   const { addToCart } = useCart();
 
   // ✅ Load Razorpay script
@@ -110,18 +111,33 @@ const Products = () => {
   };
 
   // ✅ Fetch Products
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/products");
-        setProducts(res.data);
-      } catch (error) {
-        console.error("Error fetching products:", error);
-      } finally {
-        setLoading(false);
+ useEffect(() => {
+  const fetchProducts = async () => {
+    try {
+      const res = await axios.get("http://localhost:5000/api/products");
+
+      setProducts(res.data);
+
+      if (res.status === 200) {
+        setStatus("success");
+        console.log("Products fetched successfully");
+      } else {
+        setStatus("failed");
+        console.log("Failed to fetch products");
       }
-    };
-    fetchProducts();
+
+    } catch (error) {
+      setStatus("error");
+      console.error("Error fetching products:", error);
+
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchProducts();
+
+
   }, []);
 
   const filteredProducts = products.filter((p) =>

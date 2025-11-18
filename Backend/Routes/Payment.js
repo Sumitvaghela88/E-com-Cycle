@@ -8,64 +8,84 @@ const router = express.Router();
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
+ key_secret: process.env.RAZORPAY_SECRET
+
 });
 
-//  Create new order
+// -------------------------------
+// CREATE ORDER
+// -------------------------------
 router.post("/create-order", async (req, res) => {
   try {
     const { amount, user } = req.body;
 
+    console.log("➡ Amount received:", amount);
+    console.log("➡ User received:", user);
+
     const options = {
-      amount: amount * 100, // Razorpay takes amount in paisa
+      amount: amount * 100,
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
     };
 
     const order = await razorpay.orders.create(options);
 
-    const newOrder = new Order({
+    console.log("➡ Razorpay Created Order:", order);
+
+    await Order.create({
       user,
       amount,
       currency: order.currency,
-      status: order.status,
+      status: "created",
       razorpay_order_id: order.id,
     });
 
-    await newOrder.save();
+    res.json({
+      success: true,
+      key_id: process.env.RAZORPAY_KEY_ID,
+      amount: order.amount,
+      currency: order.currency,
+      order_id: order.id,
+    });
 
-    res.json({ order });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Something went wrong!" });
+    console.error("🔥 Razorpay Error:", error); // <-- ADD THIS
+    res.status(500).json({ message: error.message });
   }
 });
 
-//  Verify payment
+// -------------------------------
+// VERIFY PAYMENT
+// -------------------------------
 router.post("/verify-payment", async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
+
     const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", process.env.RAZORPAY_SECRET) // FIXED
       .update(body.toString())
       .digest("hex");
 
-    const isAuthentic = expectedSignature === razorpay_signature;
-
-    if (isAuthentic) {
+    if (expectedSignature === razorpay_signature) {
       await Order.findOneAndUpdate(
         { razorpay_order_id },
-        { razorpay_payment_id, razorpay_signature, status: "paid" }
+        {
+          razorpay_payment_id,
+          razorpay_signature,
+          status: "paid",
+        }
       );
 
-      res.json({ success: true, message: "Payment verified successfully!" });
-    } else {
-      res.status(400).json({ success: false, message: "Invalid signature!" });
+      return res.json({ success: true, message: "Payment verified successfully!" });
     }
+
+    res.status(400).json({ success: false, message: "Signature mismatch!" });
+
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Verification Error:", err);
+    res.status(500).json({ message: "Payment verification failed!" });
   }
 });
 

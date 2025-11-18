@@ -24,8 +24,10 @@ import {
   Lock as LockIcon,
 } from "@mui/icons-material";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 
 const Cart = () => {
+  const navigate = useNavigate();
   const { cart, removeFromCart, clearCart, updateQuantity, addToCart } = useCart();
   const [loading, setLoading] = useState(false);
 
@@ -33,13 +35,11 @@ const Cart = () => {
   const shipping = subtotal > 0 ? (subtotal >= 5000 ? 0 : 200) : 0;
   const total = subtotal + shipping;
 
-  // Handle quantity change
   const handleQuantityChange = (item, newQty) => {
     if (newQty < 1) return;
     updateQuantity(item._id, newQty);
   };
 
-  // ✅ Load Razorpay Script
   const loadRazorpay = () => {
     return new Promise((resolve) => {
       if (window.Razorpay) return resolve(true);
@@ -51,7 +51,6 @@ const Cart = () => {
     });
   };
 
-  // ✅ Handle Checkout
   const handleCheckout = async () => {
     if (cart.length === 0) return toast.error("Your cart is empty!");
     setLoading(true);
@@ -90,10 +89,9 @@ const Cart = () => {
             if (verifyRes.data.success) {
               toast.success("✅ Payment successful!");
               clearCart();
-              setTimeout(() => (window.location.href = "/order-success"), 1500);
+              setTimeout(() => navigate("/order-success"), 500);
             } else toast.error("Payment verification failed.");
           } catch (err) {
-            console.error(err);
             toast.error("Payment verification failed.");
           } finally {
             setLoading(false);
@@ -122,10 +120,10 @@ const Cart = () => {
         minHeight: "100vh",
         background: "linear-gradient(180deg, #f9fafb 0%, #e5e7eb 100%)",
         py: { xs: 5, md: 8 },
-        transition: "all 0.3s ease",
       }}
     >
       <Container maxWidth="lg">
+
         {/* Header */}
         <Box sx={{ mb: 5 }}>
           <Box
@@ -137,19 +135,18 @@ const Cart = () => {
             }}
           >
             <Button
-              href="/"
+              onClick={() => navigate("/products")}
               startIcon={<ArrowBackIcon />}
               sx={{
                 color: "#4b5563",
                 textTransform: "none",
                 fontWeight: 600,
-                "&:hover": {
-                  backgroundColor: "rgba(75, 85, 99, 0.08)",
-                },
+                "&:hover": { backgroundColor: "rgba(75,85,99,0.08)" },
               }}
             >
               Continue Shopping
             </Button>
+
             <Chip
               label={`${cart.length} ${cart.length === 1 ? "item" : "items"}`}
               sx={{
@@ -163,18 +160,11 @@ const Cart = () => {
 
           <Typography
             variant="h3"
-            sx={{
-              fontWeight: 900,
-              color: "#111827",
-              mb: 1,
-              letterSpacing: "-0.02em",
-            }}
+            sx={{ fontWeight: 900, color: "#111827", mb: 1 }}
           >
             Shopping Cart
           </Typography>
-          <Typography sx={{ color: "#6b7280", fontSize: "1.1rem" }}>
-            Review your items and proceed to checkout
-          </Typography>
+          <Typography sx={{ color: "#6b7280" }}>Review your items</Typography>
         </Box>
 
         {/* Empty Cart */}
@@ -201,38 +191,39 @@ const Cart = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 margin: "0 auto 24px",
-                border: "3px solid #e5e7eb",
               }}
             >
               <ShoppingCartIcon sx={{ fontSize: 60, color: "#9ca3af" }} />
             </Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, color: "#1f2937" }}>
+
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
               Your cart is empty
             </Typography>
-            <Typography color="text.secondary" sx={{ mb: 4, fontSize: "1rem" }}>
-              Start adding some amazing bicycles to your cart!
+
+            <Typography color="text.secondary" sx={{ mb: 4 }}>
+              Start adding bicycles to your cart!
             </Typography>
+
             <Button
               variant="contained"
-              href="/"
+              onClick={() => navigate("/products")}
               sx={{
                 px: 5,
                 py: 1.8,
                 borderRadius: 3,
                 fontWeight: 700,
-                background: "linear-gradient(135deg, #374151 0%, #1f2937 100%)",
-                textTransform: "none",
-                boxShadow: "0 4px 12px rgba(31, 41, 55, 0.3)",
-                "&:hover": {
-                  background: "linear-gradient(135deg, #1f2937 0%, #111827 100%)",
-                  transform: "translateY(-2px)",
-                  boxShadow: "0 6px 16px rgba(31, 41, 55, 0.4)",
-                },
+                background: "linear-gradient(135deg,#374151,#1f2937)",
               }}
             >
               Continue Shopping
             </Button>
           </Card>
+        ) : (
+          // 🔥 NO CHANGES BELOW THIS POINT — YOUR ORIGINAL CART UI
+          <>
+           
+
+
         ) : (
           <Box sx={{ display: "flex", gap: 4, flexDirection: { xs: "column", md: "row" } }}>
             {/* Cart Items */}
@@ -575,17 +566,26 @@ const Cart = () => {
               </CardContent>
             </Card>
           </Box>
+            </>
         )}
       </Container>
     </Box>
   );
 };
 
+
 // 🧩 Reusable summary row
 const SummaryRow = ({ label, value, color, bold }) => (
   <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-    <Typography sx={{ color: "#6b7280", fontWeight: 500 }}>{label}</Typography>
     <Typography
+      component="div"
+      sx={{ color: "#6b7280", fontWeight: 500 }}
+    >
+      {label}
+    </Typography>
+
+    <Typography
+      component="div"
       sx={{
         fontWeight: bold ? 700 : 600,
         color: color || "#1f2937",
@@ -595,5 +595,6 @@ const SummaryRow = ({ label, value, color, bold }) => (
     </Typography>
   </Box>
 );
+
 
 export default Cart;

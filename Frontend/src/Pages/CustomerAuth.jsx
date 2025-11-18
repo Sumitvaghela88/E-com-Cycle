@@ -1,36 +1,37 @@
-import React, { useState } from "react";
+// src/Pages/CustomerAuth.jsx
+import React, { useState, useContext, useEffect } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext";
 
 const API_URL = "http://localhost:5000/api";
 
 export default function CustomerAuth() {
-  const [isLogin, setIsLogin] = useState(true); // toggle between login/register
+  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
+  const role = "customer";
   const navigate = useNavigate();
+  const { user, login } = useContext(AuthContext);
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "", // Added confirmPassword field
-    phone: "",
-    address: { street: "", city: "", state: "", zipCode: "" },
-  });
+  useEffect(() => {
+    if (user) navigate("/");
+  }, [user, navigate]);
 
-  // Initial form state for resetting
   const initialFormState = {
     name: "",
     email: "",
-    confirmPassword: "", // Added confirmPassword to initial state
     password: "",
+    confirmPassword: "",
     phone: "",
     address: { street: "", city: "", state: "", zipCode: "" },
   };
 
+  const [form, setForm] = useState(initialFormState);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
+
     if (["street", "city", "state", "zipCode"].includes(name)) {
       setForm((prev) => ({
         ...prev,
@@ -41,79 +42,81 @@ export default function CustomerAuth() {
     }
   };
 
-  // ====== HANDLE SUBMIT ======
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       if (isLogin) {
-        // === LOGIN ===
         const { data } = await axios.post(`${API_URL}/auth/login`, {
           email: form.email,
           password: form.password,
         });
 
-        if (data.user?.role === "customer") {
-          localStorage.setItem("userToken", data.token);
-          localStorage.setItem("userData", JSON.stringify(data.user));
-          toast.success(`Welcome back, ${data.user.name}!`);
-          navigate("/");
-        } else {
-          toast.error("Only customers can log in here.");
-        }
-      } else {
-        // === REGISTER ===
-        if (form.password !== form.confirmPassword) {
-          toast.error("Passwords do not match!");
-          setLoading(false);
+        if (data.user?.role !== "customer") {
+          toast.error("This account is not a customer.");
           return;
         }
+
+        login(data.user, data.token);
+        toast.success(`Welcome back, ${data.user.name}!`);
+        navigate("/");
+        return;
+      }
+
+      if (!isLogin) {
+        if (form.password !== form.confirmPassword) {
+          toast.error("Passwords do not match.");
+          return;
+        }
+
         const { data } = await axios.post(`${API_URL}/auth/register`, form);
-        localStorage.setItem("userToken", data.token);
-        localStorage.setItem("userData", JSON.stringify(data.user));
+
+        login(data.user, data.token);
         toast.success("Account created successfully!");
         navigate("/");
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Something went wrong!");
+      toast.error(err.response?.data?.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 flex items-center justify-center p-4">
+      <div className="backdrop-blur-lg bg-white/60 border border-gray-200 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col md:flex-row">
+
         {/* LEFT PANEL */}
-        <div className="md:w-1/2 bg-indigo-600 text-white flex flex-col justify-center items-center p-10 text-center">
-          <h2 className="text-4xl font-bold mb-4">
-            {isLogin ? "Welcome Back!" : "Join Our Ride 🚴"}
+        <div className="md:w-1/2 bg-gradient-to-br from-gray-800 to-gray-700 text-white flex flex-col justify-center items-center p-10 text-center">
+          <h2 className="text-4xl font-extrabold mb-4 tracking-wide drop-shadow">
+            {isLogin ? "Welcome Back!" : "Join Us Today"}
           </h2>
-          <p className="text-sm mb-6">
+
+          <p className="text-sm mb-6 opacity-90">
             {isLogin
-              ? "Login to access your account and explore new bicycles."
-              : "Sign up now and start your cycling journey with us!"}
+              ? "Login to access your customer account."
+              : "Create your account and enjoy our services!"}
           </p>
+
           <button
             onClick={() => {
               setIsLogin(!isLogin);
-              setForm(initialFormState); // Clear form fields on toggle
+              setForm(initialFormState);
             }}
-            className="px-6 py-2 border border-white rounded-lg hover:bg-white hover:text-indigo-600 transition"
+            className="px-6 py-2 border border-white rounded-lg hover:bg-white hover:text-gray-800 transition-all duration-300 shadow-sm"
           >
             {isLogin ? "Create an Account" : "Already have an account?"}
           </button>
         </div>
 
-        {/* RIGHT PANEL (FORM) */}
+        {/* RIGHT PANEL */}
         <div className="md:w-1/2 p-10">
-          <h3 className="text-3xl font-bold text-center mb-6 text-gray-800">
+          <h3 className="text-3xl font-bold text-center mb-8 text-gray-700">
             {isLogin ? "Customer Login" : "Customer Registration"}
           </h3>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name only in register */}
             {!isLogin && (
               <input
                 type="text"
@@ -122,22 +125,20 @@ export default function CustomerAuth() {
                 value={form.name}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
               />
             )}
 
-            {/* Email */}
             <input
               type="email"
               name="email"
-              placeholder="Email"
+              placeholder="Email Address"
               value={form.email}
               onChange={handleChange}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
             />
 
-            {/* Password */}
             <input
               type="password"
               name="password"
@@ -145,10 +146,9 @@ export default function CustomerAuth() {
               value={form.password}
               onChange={handleChange}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+              className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
             />
 
-            {/* Confirm Password only in register */}
             {!isLogin && (
               <input
                 type="password"
@@ -157,28 +157,30 @@ export default function CustomerAuth() {
                 value={form.confirmPassword}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
               />
             )}
-            {/* Extra fields for register */}
+
             {!isLogin && (
               <>
                 <input
                   type="text"
                   name="phone"
-                  placeholder="Phone"
+                  placeholder="Phone Number"
                   value={form.phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
                 />
+
                 <input
                   type="text"
                   name="street"
-                  placeholder="Street"
+                  placeholder="Street Address"
                   value={form.address.street}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
                 />
+
                 <div className="grid grid-cols-3 gap-3">
                   <input
                     type="text"
@@ -186,7 +188,7 @@ export default function CustomerAuth() {
                     placeholder="City"
                     value={form.address.city}
                     onChange={handleChange}
-                    className="col-span-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    className="px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
                   />
                   <input
                     type="text"
@@ -194,7 +196,7 @@ export default function CustomerAuth() {
                     placeholder="State"
                     value={form.address.state}
                     onChange={handleChange}
-                    className="col-span-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    className="px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
                   />
                   <input
                     type="text"
@@ -202,25 +204,18 @@ export default function CustomerAuth() {
                     placeholder="ZIP"
                     value={form.address.zipCode}
                     onChange={handleChange}
-                    className="col-span-1 w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                    className="px-4 py-3 border rounded-lg focus:ring-2 ring-gray-400 outline-none bg-white/70"
                   />
                 </div>
               </>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+              className="w-full bg-gray-800 text-white py-3 rounded-lg font-medium hover:bg-gray-900 transition-all duration-300 disabled:opacity-50 shadow-md"
             >
-              {loading
-                ? isLogin
-                  ? "Signing in..."
-                  : "Registering..."
-                : isLogin
-                ? "Sign In"
-                : "Sign Up"}
+              {loading ? "Processing..." : isLogin ? "Login" : "Register"}
             </button>
           </form>
         </div>

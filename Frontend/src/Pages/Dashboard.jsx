@@ -1,3 +1,4 @@
+// AdminDashboard.jsx
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
@@ -56,7 +57,10 @@ function ProductForm({ product, onSubmit, onCancel }) {
       images: form.images ? [form.images] : [],
       specifications: {
         ...form.specifications,
-        color: form.specifications.color.split(",").map((c) => c.trim()).filter(Boolean),
+        color: form.specifications.color
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean),
       },
     };
     onSubmit(data);
@@ -386,11 +390,7 @@ export default function AdminDashboard() {
     recentOrders: [],
   });
   const [loading, setLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [notification, setNotification] = useState({ show: false, message: "", type: "" });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showCustomerPassword, setShowCustomerPassword] = useState(false);
 
   // Product states
   const [products, setProducts] = useState([]);
@@ -402,111 +402,21 @@ export default function AdminDashboard() {
   const [filterCategory, setFilterCategory] = useState("");
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  // Customer registration states
-  const [isCustomerRegister, setIsCustomerRegister] = useState(false);
-  const [customerForm, setCustomerForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    phone: "",
-    address: { street: "", city: "", state: "", zipCode: "" },
-  });
-
   const showToast = (message, type = "success") => {
     setNotification({ show: true, message, type });
     setTimeout(() => setNotification({ show: false, message: "", type: "" }), 3000);
   };
 
-  useEffect(() => {
-    const token = localStorage.getItem("adminToken");
-    const role = localStorage.getItem("userRole");
-    if (token && role === "admin") {
-      setIsLoggedIn(true);
-      axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-      loadDashboardData();
-    }
-  }, []);
-
-  const handleAdminLogin = async () => {
-    try {
-      const { data } = await axiosInstance.post("/auth/login", loginForm);
-      if (data.user?.role === "admin") {
-        localStorage.setItem("adminToken", data.token);
-        localStorage.setItem("userRole", "admin");
-        axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${data.token}`;
-        setIsLoggedIn(true);
-        loadDashboardData();
-        showToast("Admin login successful!");
-      } else {
-        showToast("Only admins can access this dashboard", "error");
-      }
-    } catch (err) {
-      showToast(err.response?.data?.message || "Login failed", "error");
-    }
-  };
-
-  const handleCustomerAuth = async (e) => {
-    e.preventDefault();
-    try {
-      if (isCustomerRegister) {
-        if (customerForm.password !== customerForm.confirmPassword) {
-          showToast("Passwords do not match!", "error");
-          return;
-        }
-        await axiosInstance.post("/auth/register", customerForm);
-        showToast("Registration successful! Redirecting...", "success");
-        setTimeout(() => {
-          window.location.href = "/";
-        }, 2000);
-      } else {
-        const { data } = await axiosInstance.post("/auth/login", {
-          email: customerForm.email,
-          password: customerForm.password,
-        });
-        if (data.user?.role === "customer") {
-          localStorage.setItem("userToken", data.token);
-          localStorage.setItem("userData", JSON.stringify(data.user));
-          showToast("Login successful! Redirecting...", "success");
-          setTimeout(() => {
-            window.location.href = "/";
-          }, 2000);
-        } else {
-          showToast("Invalid customer credentials", "error");
-        }
-      }
-    } catch (err) {
-      showToast(err.response?.data?.message || "Authentication failed", "error");
-    }
-  };
-
-  const handleCustomerFormChange = (e) => {
-    const { name, value } = e.target;
-    if (["street", "city", "state", "zipCode"].includes(name)) {
-      setCustomerForm((prev) => ({
-        ...prev,
-        address: { ...prev.address, [name]: value },
-      }));
-    } else {
-      setCustomerForm((prev) => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("userRole");
-    setIsLoggedIn(false);
-    setLoginForm({ email: "", password: "" });
-    showToast("Logged out successfully!");
-  };
-
+  // load main dashboard stats
   const loadDashboardData = async () => {
     try {
+      setLoading(true);
       const { data } = await axiosInstance.get("/admin/stats");
       setStats(data);
       setLoading(false);
     } catch (err) {
       console.error("Error loading dashboard:", err);
+      showToast("Failed to load dashboard stats", "error");
       setLoading(false);
     }
   };
@@ -519,6 +429,7 @@ export default function AdminDashboard() {
       setLoading(false);
     } catch (err) {
       console.error("Error loading products:", err);
+      showToast("Failed to load products", "error");
       setLoading(false);
     }
   };
@@ -596,15 +507,24 @@ export default function AdminDashboard() {
     }
   };
 
+  // initial load: dashboard stats + products (and load page-specific data on page change)
+  useEffect(() => {
+    loadDashboardData();
+    loadProducts();
+    // do not forcibly load customers/orders until user navigates there (keeps initial load lighter)
+  }, []);
+
   useEffect(() => {
     if (currentPage === "products") loadProducts();
     else if (currentPage === "customers") loadCustomers();
     else if (currentPage === "orders") loadOrders();
+    else if (currentPage === "dashboard") loadDashboardData();
   }, [currentPage]);
 
   // Filter products
   const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.brand?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = !filterCategory || p.category === filterCategory;
     return matchesSearch && matchesCategory;
@@ -615,279 +535,6 @@ export default function AdminDashboard() {
     c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  // LOGIN PAGE
-  if (!isLoggedIn) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-        {notification.show && (
-          <div
-            className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in ${
-              notification.type === "error" ? "bg-red-500" : "bg-green-500"
-            } text-white flex items-center gap-2`}
-          >
-            {notification.type === "error" ? (
-              <AlertCircle className="w-5 h-5" />
-            ) : (
-              <Check className="w-5 h-5" />
-            )}
-            {notification.message}
-          </div>
-        )}
-
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl overflow-hidden flex flex-col lg:flex-row">
-          {/* LEFT PANEL */}
-          <div className="lg:w-2/5 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 text-white flex flex-col justify-center items-center p-10 text-center relative overflow-hidden">
-            <div className="absolute inset-0 bg-black opacity-10"></div>
-            <div className="relative z-10">
-              <div className="bg-white bg-opacity-20 backdrop-blur-sm p-6 rounded-2xl mb-6 inline-block">
-                <LayoutDashboard className="w-20 h-20 mx-auto drop-shadow-lg" />
-              </div>
-              <h2 className="text-4xl font-bold mb-3 drop-shadow-lg">🚴 Bicycle Store</h2>
-              <p className="text-lg opacity-90 mb-8">
-                {isCustomerRegister
-                  ? "Join us and start your cycling journey!"
-                  : "Welcome back! Login to continue"}
-              </p>
-
-              <div className="space-y-4 w-full max-w-xs mx-auto">
-                <button
-                  onClick={() => {
-                    setIsCustomerRegister(!isCustomerRegister);
-                    setCustomerForm({
-                      name: "",
-                      email: "",
-                      password: "",
-                      confirmPassword: "",
-                      phone: "",
-                      address: { street: "", city: "", state: "", zipCode: "" },
-                    });
-                  }}
-                  className="w-full px-6 py-3 border-2 border-white rounded-xl hover:bg-white hover:text-indigo-600 transition font-medium shadow-lg backdrop-blur-sm"
-                >
-                  {isCustomerRegister ? "Already have an account? Sign In" : "Create New Account"}
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-white opacity-30"></div>
-                  <span className="text-sm opacity-75">Secure Login</span>
-                  <div className="flex-1 h-px bg-white opacity-30"></div>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center justify-center gap-6 text-sm opacity-75">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  <span>Secure</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  <span>Fast</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4" />
-                  <span>Reliable</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* RIGHT PANEL */}
-          <div className="lg:w-3/5 p-10 lg:p-12">
-            <h3 className="text-3xl font-bold text-center mb-8 text-gray-800 flex items-center justify-center gap-3">
-              {isCustomerRegister ? (
-                <>
-                  <Users className="w-8 h-8 text-indigo-600" />
-                  Customer Registration
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="w-8 h-8 text-indigo-600" />
-                  Customer Login
-                </>
-              )}
-            </h3>
-
-            <form onSubmit={handleCustomerAuth} className="space-y-4">
-              {isCustomerRegister && (
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="name"
-                    placeholder="Full Name"
-                    value={customerForm.name}
-                    onChange={handleCustomerFormChange}
-                    required
-                    className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                  />
-                  <Users className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                </div>
-              )}
-
-              <div className="relative">
-                <input
-                  type="email"
-                  name="email"
-                  placeholder="Email Address"
-                  value={customerForm.email}
-                  onChange={handleCustomerFormChange}
-                  required
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                />
-                <Mail className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-              </div>
-
-              <div className="relative">
-                <input
-                  type={showCustomerPassword ? "text" : "password"}
-                  name="password"
-                  placeholder="Password"
-                  value={customerForm.password}
-                  onChange={handleCustomerFormChange}
-                  required
-                  className="w-full px-4 py-3 pl-12 pr-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                />
-                <CreditCard className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                <button
-                  type="button"
-                  onClick={() => setShowCustomerPassword(!showCustomerPassword)}
-                  className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
-                >
-                  {showCustomerPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-
-              {isCustomerRegister && (
-                <>
-                  <div className="relative">
-                    <input
-                      type={showCustomerPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      placeholder="Confirm Password"
-                      value={customerForm.confirmPassword}
-                      onChange={handleCustomerFormChange}
-                      required
-                      className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                    />
-                    <Check className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      type="tel"
-                      name="phone"
-                      placeholder="Phone Number"
-                      value={customerForm.phone}
-                      onChange={handleCustomerFormChange}
-                      className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                    />
-                    <Phone className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                  </div>
-
-                  <div className="bg-gray-50 p-4 rounded-xl space-y-3">
-                    <h4 className="font-semibold text-gray-700 flex items-center gap-2">
-                      <MapPin className="w-5 h-5" />
-                      Shipping Address
-                    </h4>
-                    <input
-                      type="text"
-                      name="street"
-                      placeholder="Street Address"
-                      value={customerForm.address.street}
-                      onChange={handleCustomerFormChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                    />
-                    <div className="grid grid-cols-3 gap-3">
-                      <input
-                        type="text"
-                        name="city"
-                        placeholder="City"
-                        value={customerForm.address.city}
-                        onChange={handleCustomerFormChange}
-                        className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                      />
-                      <input
-                        type="text"
-                        name="state"
-                        placeholder="State"
-                        value={customerForm.address.state}
-                        onChange={handleCustomerFormChange}
-                        className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                      />
-                      <input
-                        type="text"
-                        name="zipCode"
-                        placeholder="ZIP"
-                        value={customerForm.address.zipCode}
-                        onChange={handleCustomerFormChange}
-                        className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg transform hover:scale-[1.02]"
-              >
-                {isCustomerRegister ? "Create Account" : "Sign In"}
-              </button>
-            </form>
-
-            {/* Admin Login Section */}
-            <div className="mt-10 pt-8 border-t-2 border-gray-200">
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
-                  <LayoutDashboard className="w-5 h-5 text-gray-600" />
-                  <span className="font-semibold text-gray-700">Admin Portal</span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={loginForm.email}
-                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                    placeholder="Admin Email"
-                    className="w-full px-4 py-3 pl-12 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-400 focus:border-transparent transition"
-                  />
-                  <Mail className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                </div>
-
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={loginForm.password}
-                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                    placeholder="Admin Password"
-                    className="w-full px-4 py-3 pl-12 pr-12 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-gray-400 focus:border-transparent transition"
-                  />
-                  <CreditCard className="w-5 h-5 text-gray-400 absolute left-4 top-3.5" />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleAdminLogin}
-                  className="w-full bg-gray-800 text-white py-4 rounded-xl hover:bg-gray-900 transition font-semibold shadow-md flex items-center justify-center gap-2"
-                >
-                  <LayoutDashboard className="w-5 h-5" />
-                  Admin Login
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ADMIN DASHBOARD
   const navigation = [
@@ -900,7 +547,7 @@ export default function AdminDashboard() {
   const statsCards = [
     {
       title: "Total Revenue",
-      value: `₹${stats.totalRevenue.toLocaleString()}`,
+      value: `₹${Number(stats.totalRevenue || 0).toLocaleString()}`,
       icon: DollarSign,
       color: "bg-gradient-to-br from-green-500 to-emerald-600",
       trend: "+12.5%",
@@ -908,7 +555,7 @@ export default function AdminDashboard() {
     },
     {
       title: "Total Orders",
-      value: stats.totalOrders,
+      value: stats.totalOrders || 0,
       icon: ShoppingCart,
       color: "bg-gradient-to-br from-blue-500 to-indigo-600",
       trend: "+8.2%",
@@ -916,7 +563,7 @@ export default function AdminDashboard() {
     },
     {
       title: "Products",
-      value: stats.totalProducts,
+      value: stats.totalProducts || 0,
       icon: Package,
       color: "bg-gradient-to-br from-purple-500 to-pink-600",
       trend: "+3.1%",
@@ -924,7 +571,7 @@ export default function AdminDashboard() {
     },
     {
       title: "Customers",
-      value: stats.totalUsers,
+      value: stats.totalUsers || 0,
       icon: Users,
       color: "bg-gradient-to-br from-orange-500 to-red-600",
       trend: "+15.3%",
@@ -940,18 +587,12 @@ export default function AdminDashboard() {
             notification.type === "error" ? "bg-red-500" : "bg-green-500"
           } text-white flex items-center gap-2 animate-slide-in`}
         >
-          {notification.type === "error" ? (
-            <AlertCircle className="w-5 h-5" />
-          ) : (
-            <Check className="w-5 h-5" />
-          )}
+          {notification.type === "error" ? <AlertCircle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
           {notification.message}
         </div>
       )}
 
-      {selectedOrder && (
-        <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
-      )}
+      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
 
       {/* Sidebar */}
       <aside
@@ -984,11 +625,15 @@ export default function AdminDashboard() {
             );
           })}
           <button
-            onClick={handleLogout}
+            onClick={() => {
+              // Optionally handle a local "logout-like" action: just a placeholder since auth removed
+              setSidebarOpen(false);
+              showToast("Sidebar collapsed");
+            }}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-300 hover:bg-red-600 hover:text-white mt-8 transition-all"
           >
             <LogOut className="w-5 h-5" />
-            <span className="font-medium">Logout</span>
+            <span className="font-medium">Collapse</span>
           </button>
         </nav>
       </aside>
@@ -1080,9 +725,7 @@ export default function AdminDashboard() {
                               #{order._id?.slice(-8).toUpperCase()}
                             </td>
                             <td className="p-4 text-sm text-gray-700">{order.user?.name || "N/A"}</td>
-                            <td className="p-4 text-sm font-semibold text-gray-800">
-                              ₹{order.totalAmount}
-                            </td>
+                            <td className="p-4 text-sm font-semibold text-gray-800">₹{order.totalAmount}</td>
                             <td className="p-4 text-sm">
                               <span
                                 className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -1194,25 +837,16 @@ export default function AdminDashboard() {
                           <th className="p-4 text-sm font-semibold text-gray-700">Category</th>
                           <th className="p-4 text-sm font-semibold text-gray-700">Price</th>
                           <th className="p-4 text-sm font-semibold text-gray-700">Stock</th>
-                          <th className="p-4 text-sm font-semibold text-gray-700 text-center">
-                            Actions
-                          </th>
+                          <th className="p-4 text-sm font-semibold text-gray-700 text-center">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredProducts.length > 0 ? (
                           filteredProducts.map((p) => (
-                            <tr
-                              key={p._id}
-                              className="border-b hover:bg-gray-50 transition-colors"
-                            >
+                            <tr key={p._id} className="border-b hover:bg-gray-50 transition-colors">
                               <td className="p-4">
                                 {p.images?.[0] ? (
-                                  <img
-                                    src={p.images[0]}
-                                    alt={p.name}
-                                    className="w-16 h-16 object-cover rounded-xl shadow-sm"
-                                  />
+                                  <img src={p.images[0]} alt={p.name} className="w-16 h-16 object-cover rounded-xl shadow-sm" />
                                 ) : (
                                   <div className="w-16 h-16 bg-gray-200 rounded-xl flex items-center justify-center">
                                     <Package className="w-8 h-8 text-gray-400" />
@@ -1222,21 +856,11 @@ export default function AdminDashboard() {
                               <td className="p-4 font-medium text-gray-800">{p.name}</td>
                               <td className="p-4 text-gray-600">{p.brand || "-"}</td>
                               <td className="p-4">
-                                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                                  {p.category || "N/A"}
-                                </span>
+                                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">{p.category || "N/A"}</span>
                               </td>
                               <td className="p-4 font-semibold text-gray-800">₹{p.price}</td>
                               <td className="p-4">
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    p.stock > 10
-                                      ? "bg-green-100 text-green-800"
-                                      : p.stock > 0
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-red-100 text-red-800"
-                                  }`}
-                                >
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${p.stock > 10 ? "bg-green-100 text-green-800" : p.stock > 0 ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}`}>
                                   {p.stock} units
                                 </span>
                               </td>
@@ -1306,21 +930,15 @@ export default function AdminDashboard() {
                         <th className="p-4 text-sm font-semibold text-gray-700">Amount</th>
                         <th className="p-4 text-sm font-semibold text-gray-700">Status</th>
                         <th className="p-4 text-sm font-semibold text-gray-700">Date</th>
-                        <th className="p-4 text-sm font-semibold text-gray-700 text-center">
-                          Actions
-                        </th>
+                        <th className="p-4 text-sm font-semibold text-gray-700 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {orders.map((order) => (
                         <tr key={order._id} className="border-b hover:bg-gray-50 transition">
-                          <td className="p-4 font-medium text-gray-800">
-                            #{order._id.slice(-6).toUpperCase()}
-                          </td>
+                          <td className="p-4 font-medium text-gray-800">#{order._id.slice(-6).toUpperCase()}</td>
                           <td className="p-4 text-gray-700">{order.user?.name || "N/A"}</td>
-                          <td className="p-4 font-semibold text-gray-800">
-                            ₹{order.totalAmount}
-                          </td>
+                          <td className="p-4 font-semibold text-gray-800">₹{order.totalAmount}</td>
                           <td className="p-4">
                             <select
                               value={order.orderStatus}
@@ -1338,9 +956,7 @@ export default function AdminDashboard() {
                               <option>Delivered</option>
                             </select>
                           </td>
-                          <td className="p-4 text-gray-600">
-                            {new Date(order.createdAt).toLocaleDateString()}
-                          </td>
+                          <td className="p-4 text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
                           <td className="p-4 text-center">
                             <button
                               onClick={() => setSelectedOrder(order)}
@@ -1399,9 +1015,7 @@ export default function AdminDashboard() {
                         <th className="p-4 text-sm font-semibold text-gray-700">Phone</th>
                         <th className="p-4 text-sm font-semibold text-gray-700">Location</th>
                         <th className="p-4 text-sm font-semibold text-gray-700">Joined</th>
-                        <th className="p-4 text-sm font-semibold text-gray-700 text-center">
-                          Actions
-                        </th>
+                        <th className="p-4 text-sm font-semibold text-gray-700 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1477,7 +1091,7 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes slide-in {
           from {
             transform: translateX(100%);
