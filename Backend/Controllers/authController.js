@@ -1,83 +1,95 @@
 const jwt = require("jsonwebtoken");
 const User = require("../Models/User");
 
-// ===== Helper to Generate JWT with Role =====
+// Generate JWT
 const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "3d" }
+    { expiresIn: "7d" }
   );
 };
 
-// ===== REGISTER USER (Default: customer) =====
+// ==============================
+// REGISTER USER
+// ==============================
 exports.registerUser = async (req, res) => {
   try {
-    const { name, email, password, phone, address, role } = req.body;
+    const { name, email, password, phone, address } = req.body;
 
-    // Check for existing email
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ message: "User already exists" });
 
-    // Create new user (default role = customer)
     const user = await User.create({
       name,
       email,
       password,
       phone,
       address,
-      role: "customer", // Ensure new registrations are always 'customer'
+      role: "customer",
     });
 
     const token = generateToken(user);
 
     res.status(201).json({
+      success: true,
       message: "Registration successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      token, // 👈 Send token to frontend now
     });
+
   } catch (err) {
-    console.error("Register Error:", err.message);
-    res.status(500).json({ message: "Registration failed", error: err.message });
+    console.error("Register Error:", err);
+    res.status(500).json({ message: "Registration failed" });
   }
 };
 
-// ===== LOGIN USER =====
+// ==============================
+// LOGIN USER
+// ==============================
 exports.loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
     const user = await User.findOne({ email });
     if (!user)
       return res.status(404).json({ message: "User not found" });
 
-    // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    // Generate token
     const token = generateToken(user);
 
     res.json({
+      success: true,
       message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
+      user,
+      token, //  Send token to frontend (JS cookie will store)
     });
+
   } catch (err) {
-    console.error("Login Error:", err.message);
-    res.status(500).json({ message: "Login failed", error: err.message });
+    console.error("Login Error:", err);
+    res.status(500).json({ message: "Login failed" });
   }
+};
+
+// ==============================
+// GET LOGGED USER
+// ==============================
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to get user" });
+  }
+};
+
+// ==============================
+// LOGOUT USER
+// ==============================
+exports.logoutUser = (req, res) => {
+  res.json({ message: "Logged out successfully" });
 };

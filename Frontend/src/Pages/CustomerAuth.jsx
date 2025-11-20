@@ -1,16 +1,14 @@
 // src/Pages/CustomerAuth.jsx
 import React, { useState, useContext, useEffect } from "react";
-import axios from "axios";
+import api from "../Utils/axios";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { AuthContext } from "../context/AuthContext";
-
-const API_URL = "http://localhost:5000/api";
+import { AuthContext } from "../Context/authContext";
+import Cookies from "js-cookie";
 
 export default function CustomerAuth() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  const role = "customer";
   const navigate = useNavigate();
   const { user, login } = useContext(AuthContext);
 
@@ -47,8 +45,11 @@ export default function CustomerAuth() {
     setLoading(true);
 
     try {
+      // ===========================
+      // LOGIN
+      // ===========================
       if (isLogin) {
-        const { data } = await axios.post(`${API_URL}/auth/login`, {
+        const { data } = await api.post("/auth/login", {
           email: form.email,
           password: form.password,
         });
@@ -58,21 +59,33 @@ export default function CustomerAuth() {
           return;
         }
 
+        // Save token
+        Cookies.set("token", data.token, { expires: 7 });
+
+        // Update auth context
         login(data.user, data.token);
+
         toast.success(`Welcome back, ${data.user.name}!`);
         navigate("/");
         return;
       }
 
+      // ===========================
+      // REGISTER
+      // ===========================
       if (!isLogin) {
         if (form.password !== form.confirmPassword) {
           toast.error("Passwords do not match.");
           return;
         }
 
-        const { data } = await axios.post(`${API_URL}/auth/register`, form);
+        const { data } = await api.post("/auth/register", form);
+
+        // Save token
+        Cookies.set("token", data.token, { expires: 7 });
 
         login(data.user, data.token);
+
         toast.success("Account created successfully!");
         navigate("/");
       }

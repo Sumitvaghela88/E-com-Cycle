@@ -12,11 +12,11 @@ import Cart from "./Pages/CartPage";
 import OrderSuccess from "./Pages/Ordersuccess";
 import CustomerAuth from "./Pages/CustomerAuth";
 import AdminAuth from "./Pages/AdminAuth";
-
+import Contact from "./Pages/ContectPage";
 import CustomerProtectedRoute from "./Components/CustomerProtectedRoute";
 import AdminProtectedRoute from "./Components/AdminProtectedRoute";
 
-import { AuthContext } from "./context/AuthContext";
+import { AuthContext } from "./Context/authContext";
 
 const Home = lazy(() => import("./Pages/Home"));
 
@@ -94,6 +94,7 @@ function App() {
 
             {/* DEFAULT */}
             <Route path="*" element={<Navigate to="/" />} />
+            <Route path="/contact" element={<Contact />} />
           </Routes>
         </main>
       </Suspense>
